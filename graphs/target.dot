@@ -1,0 +1,14 @@
+strict graph {
+A;
+B;
+C;
+D;
+E;
+A -- B [weight=1];
+A -- E [weight=5];
+A -- C [weight=6];
+B -- C [weight=2];
+B -- D [weight=7];
+C -- D [weight=3];
+D -- E [weight=4];
+}
