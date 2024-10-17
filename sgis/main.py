@@ -1,7 +1,10 @@
 import networkx as nx
+import numpy as np
+import scipy
+
 from sgis.refinement import Refinement
 from sgis.treematcher import TreeMatcher 
-from sgis.util import harmonic_mean
+from sgis.util import geometric_mean, harmonic_mean
 from sgis.vf2 import GraphMatcher
 
 import time
@@ -48,8 +51,13 @@ def validate():
 def main():
     random.seed(3141592)
 
+    vf2_standard_dev = []
     vf2_means = []
+    vf2_times = []
+
     tree_means = []
+    tree_standard_dev = []
+    tree_times = []
 
     for i in range(30, 105, 5):
 
@@ -58,11 +66,11 @@ def main():
         P_EDGE = 0.02
         R_RATIO = 0.75
 
-        t_bench = 0
-        n_bench = 0
-
         vf2_expansions = []
         tree_expansions = []
+
+        vf2_time = []
+        tree_time = []
 
         for i in range(NBENCH_ITER):
             G, H = generate_benchmark_pair(N_NODES, P_EDGE, R_RATIO)
@@ -74,24 +82,33 @@ def main():
 
             GM = GraphMatcher(G, H)
             result, delta = bench(GM.subgraph_is_isomorphic)
-            t_bench += delta
+            vf2_time.append(delta)
             vf2_expansion = GM.n_expanded_nodes()
             vf2_expansions.append(vf2_expansion + 1)
             logger.info(f"\t VF2 Expansions: {vf2_expansion}")
             
             TM = TreeMatcher(G, H)
             result, delta = bench(TM.subgraph_is_isomorphic)
-            t_bench += delta
+            tree_time.append(delta)
             tree_expansion = TM.n_expanded_nodes()
             tree_expansions.append(tree_expansion + 1)
             logger.info(f"\t Refinement Expansions: {tree_expansion}")
 
-        vf2_means.append(harmonic_mean(vf2_expansions))
-        tree_means.append(harmonic_mean(tree_expansions))
+        vf2_means.append(geometric_mean(vf2_expansions))
+        vf2_standard_dev.append(scipy.stats.gstd(vf2_expansions))
+        vf2_times.append(geometric_mean(vf2_time))
+
+        tree_means.append(geometric_mean(tree_expansions))
+        tree_standard_dev.append(scipy.stats.gstd(tree_expansions))
+        tree_times.append(geometric_mean(tree_time))
 
     print(",".join([f"{i}" for i in range(30, 105, 5)]))
-    print("vf2", ",".join([f"{i}" for i in vf2_means]))
-    print("tree_means", ",".join([f"{i}" for i in tree_means]))
+    print(",".join([f"{i}" for i in vf2_means]))
+    print(",".join([f"{i}" for i in tree_means]))
+    print(",".join([f"{i}" for i in vf2_standard_dev]))
+    print(",".join([f"{i}" for i in tree_standard_dev]))
+    print(",".join([f"{i}" for i in vf2_times]))
+    print(",".join([f"{i}" for i in tree_times]))
 
 
 def test_treematching():

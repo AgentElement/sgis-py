@@ -1,4 +1,5 @@
 import heapq
+import numpy as np
 
 
 class PriorityQueue:
@@ -24,3 +25,6 @@ def harmonic_mean(arr):
         m += 1.0 / i
     return len(arr) / m
     
+def geometric_mean(arr):
+    a = np.log(arr)
+    return np.exp(a.mean())
