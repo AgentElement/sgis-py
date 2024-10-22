@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 import scipy
 
-from sgis.refinement import Refinement
+from sgis.refinement import Refinement, bfs
 from sgis.treematcher import TreeMatcher 
 from sgis.util import geometric_mean, harmonic_mean
 from sgis.vf2 import GraphMatcher
@@ -133,9 +133,12 @@ def test_refinement():
     random.seed(3141592)
     pattern = nx.drawing.nx_pydot.read_dot('graphs/zds_pattern.dot')
     target = nx.drawing.nx_pydot.read_dot('graphs/zds_target.dot')
+    
+    test = nx.drawing.nx_pydot.read_dot('graphs/octagon_subdivided.dot')
+    print(test)
 
+    print(bfs(test, '0'))
     R = Refinement(target, pattern)
-    R.print_refinement()
 
 
 if __name__ == '__main__':
