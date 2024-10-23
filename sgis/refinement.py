@@ -2,15 +2,13 @@ import networkx as nx
 from collections import defaultdict
 from heapq import merge
 
-from pandas.core.groupby.categorical import recode_for_groupby
-
-REFINEMENT_TRUNCATION = 10
+REFINEMENT_TRUNCATION = 10000
 
 
 def partition_dict_by_keys(G, d):
     partition = defaultdict(list)
     for k, v in d.items():
-        if v == float('inf'):
+        if v == float("inf"):
             continue
         partition[int(v)].append(G.degree(k))
     for lst in partition.values():
@@ -18,53 +16,78 @@ def partition_dict_by_keys(G, d):
     return partition
 
 
-def level_dominates(target_level, pattern_level, k):
+def level_dominates(target_level, pattern_level, trunc=None):
     i = 0
-    target_agg_level = []
-    pattern_agg_level = []
     for lt, lp in zip(target_level, pattern_level):
-        if i > k:
+        if trunc is not None and i > trunc:
             break
         i += 1
-        # target_agg_level = list(merge(target_agg_level, target_level[lt], reverse=True))
-        # pattern_agg_level = list(merge(pattern_agg_level, pattern_level[lp], reverse=True))
-        # if not multiset_dominates(target_agg_level, pattern_agg_level):
-        #     return False
         if not multiset_dominates(target_level[lt], pattern_level[lp]):
             return False
     return True
 
 
+def union_level_dominates(target_level, pattern_level, trunc=None):
+    i = 0
+    target_union = []
+    pattern_union = []
+    for lt, lp in zip(target_level, pattern_level):
+        if trunc is not None and i > trunc:
+            break
+        i += 1
+        target_union = merge(target_union, target_level[lt], reverse=True)
+        pattern_union = merge(pattern_union, pattern_level[lp], reverse=True)
+        if not multiset_dominates(target_union, pattern_union):
+            return False
+    return True
+
+
 def multiset_dominates(a, b):
-    # if len(b) > len(a):
-    #     return False
-    for (i, j) in zip(a, b):
+    for i, j in zip(a, b):
         if j > i:
             return False
     return True
 
-def pomultiset_dominates(a, b, poset):
-    for (i, j) in zip(a, b):
-        if (j, i) in poset:
-            return False
-    return True
 
-
-def bfs(G, v):
+def t_bfs(G, v):
     visited = defaultdict(int)
     levels = defaultdict(list)
-    levels[v] = [G.degree(v)]
+    levels[0] = [G.degree(v)]
     queue = [v]
-    while(len(queue) != 0):
+    while len(queue) != 0:
         vtx = queue[0]
-        del(queue[0])
+        del queue[0]
         for n in G.neighbors(vtx):
             if n in visited:
                 continue
             queue.append(n)
             depth = visited[vtx] + 1
             visited[n] = depth
-            levels[depth].append(len(list(filter(lambda x: x not in visited, G.neighbors(n)))))
+            degree = G.degree(n)
+            levels[depth].append(degree)
+    for lv in levels.values():
+        lv.sort(reverse=True)
+    return levels
+
+
+def bfs(G, v):
+    visited = defaultdict(int)
+    levels = defaultdict(list)
+    levels[0] = [G.degree(v)]
+    queue = [v]
+    while len(queue) != 0:
+        vtx = queue[0]
+        del queue[0]
+        for n in G.neighbors(vtx):
+            if n in visited:
+                continue
+            queue.append(n)
+            depth = visited[vtx] + 1
+            visited[n] = depth
+            outdegree = len(list(filter(lambda x: x not in visited, G.neighbors(n))))
+            # see counterexample case in main()
+            if outdegree != 0:
+                levels[depth].append(outdegree)
     for lv in levels.values():
         lv.sort(reverse=True)
     return levels
@@ -76,16 +99,18 @@ class Refinement:
         self.pattern = pattern
         self.refinement = defaultdict(dict)
         self.bfs_refinement()
-    
+
     def query(self, target_node, pattern_node):
         return self.refinement[target_node][pattern_node]
 
     def bfs_refinement(self):
         for t in self.target.nodes():
-            t_part = bfs(self.target, t)
+            t_part = t_bfs(self.target, t)
             for p in self.pattern.nodes():
                 p_part = bfs(self.pattern, p)
-                self.refinement[t][p] = level_dominates(t_part, p_part, REFINEMENT_TRUNCATION)
+                self.refinement[t][p] = union_level_dominates(
+                    t_part, p_part, REFINEMENT_TRUNCATION
+                )
 
     def level_refinement(self):
         apsp_t = nx.floyd_warshall(self.target)
@@ -94,73 +119,9 @@ class Refinement:
             t_part = partition_dict_by_keys(self.target, t_dists)
             for p, p_dists in apsp_p.items():
                 p_part = partition_dict_by_keys(self.pattern, p_dists)
-                self.refinement[t][p] = level_dominates(t_part, p_part, REFINEMENT_TRUNCATION)
-    
-
-    def iterative_refinement(self):
-        refinement_map = {}
-        label_map = {}
-        i = 0
-        for v in self.target:
-            neighbors = [self.target.degree(n) for n in self.target.neighbors(v)]
-            neighbors.sort(reverse=True)
-            m = (self.target.degree(v), tuple(neighbors))
-            if m not in refinement_map:
-                refinement_map[m] = f"m{i}"
-                i += 1
-            label_map[f"t{v}"] = refinement_map[m]
-        
-        for v in self.pattern:
-            neighbors = [self.pattern.degree(n) for n in self.pattern.neighbors(v)]
-            neighbors.sort(reverse=True)
-            m = (self.pattern.degree(v), tuple(neighbors))
-            if m not in refinement_map:
-                refinement_map[m] = f"m{i}"
-                i += 1
-            label_map[f"p{v}"] = refinement_map[m]
-        
-        print("refinement", refinement_map)
-        print("label", label_map)
-
-        poset = set()
-        for dom, vd in refinement_map.items():
-            for sub, vs in refinement_map.items():
-                if dom[0] > sub[0] and multiset_dominates(dom[1], sub[1]):
-                    poset |= {(vd, vs)}
-        
-        for v in self.target:
-            neighbors = [self.target.degree(n) for n in self.target.neighbors(v)]
-            neighbors.sort(reverse=True)
-            m = (self.target.degree(v), tuple(neighbors))
-            if m not in refinement_map:
-                refinement_map[m] = f"m{i}"
-                i += 1
-        
-        for v in self.pattern:
-            neighbors = [self.pattern.degree(n) for n in self.pattern.neighbors(v)]
-            neighbors.sort(reverse=True)
-            m = (self.pattern.degree(v), tuple(neighbors))
-            if m not in refinement_map:
-                refinement_map[m] = f"m{i}"
-                i += 1
-        print(refinement_map)
-
-        print(poset)
-        changed = True
-        while changed:
-            new_poset = set()
-            for dom in refinement_map.values():
-                for sub in refinement_map.values():
-                    if (dom[0], sub[0]) in poset and multiset_dominates(dom[1], sub[1]):
-                        new_poset |= {(dom, sub),}
-            changed = False
-            print(new_poset)
-
-
-    # implement ZDS refinement with trees if there is time for it
-    def iterative_level_refinement(self):
-        pass
-
+                self.refinement[t][p] = level_dominates(
+                    t_part, p_part, REFINEMENT_TRUNCATION
+                )
 
     def print_refinement(self):
         for t, td in self.refinement.items():
