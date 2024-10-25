@@ -2,6 +2,9 @@ import networkx as nx
 from collections import defaultdict
 from heapq import merge
 
+from networkx.algorithms.connectivity import build_auxiliary_node_connectivity
+from networkx.algorithms.flow import build_residual_network
+
 REFINEMENT_TRUNCATION = 10000
 
 
@@ -93,6 +96,34 @@ def bfs(G, v):
     return levels
 
 
+def l_bfs(G, v):
+    visited = defaultdict(int)
+    levels = defaultdict(list)
+    levels[0] = [G.degree(v)]
+    queue = [v]
+    H = build_auxiliary_node_connectivity(G)
+    R = build_residual_network(H, "capacity")
+    while len(queue) != 0:
+        vtx = queue[0]
+        del queue[0]
+        for n in G.neighbors(vtx):
+            if n in visited:
+                continue
+            queue.append(n)
+            depth = visited[vtx] + 1
+            visited[n] = depth
+            outdegree = len(list(filter(lambda x: x not in visited, G.neighbors(n))))
+            n_disjoint_paths = len(
+                list(nx.node_disjoint_paths(G, v, n, auxiliary=H, residual=R))
+            )
+            # see counterexample case in main()
+            if outdegree != 0:
+                levels[depth].append(outdegree + n_disjoint_paths)
+    for lv in levels.values():
+        lv.sort(reverse=True)
+    return levels
+
+
 class Refinement:
     def __init__(self, target, pattern):
         self.target = target
@@ -105,10 +136,10 @@ class Refinement:
 
     def bfs_refinement(self):
         for t in self.target.nodes():
-            t_part = t_bfs(self.target, t)
+            t_part = l_bfs(self.target, t)
             for p in self.pattern.nodes():
                 p_part = bfs(self.pattern, p)
-                self.refinement[t][p] = union_level_dominates(
+                self.refinement[t][p] = level_dominates(
                     t_part, p_part, REFINEMENT_TRUNCATION
                 )
 
