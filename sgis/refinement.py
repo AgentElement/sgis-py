@@ -1,11 +1,17 @@
 import networkx as nx
 from collections import defaultdict
 from heapq import merge
+from enum import Enum
 
 from networkx.algorithms.connectivity import build_auxiliary_node_connectivity
 from networkx.algorithms.flow import build_residual_network
 
 REFINEMENT_TRUNCATION = 10000
+
+
+class Heuristic(Enum):
+    UNION = 0
+    LEVEL = 1
 
 
 def partition_dict_by_keys(G, d):
@@ -52,7 +58,8 @@ def multiset_dominates(a, b):
     return True
 
 
-def t_bfs(G, v):
+# Degrees
+def degree_bfs(G, v):
     visited = defaultdict(int)
     levels = defaultdict(list)
     levels[0] = [G.degree(v)]
@@ -73,7 +80,8 @@ def t_bfs(G, v):
     return levels
 
 
-def bfs(G, v):
+# Outdegrees
+def outdegree_bfs(G, v):
     visited = defaultdict(int)
     levels = defaultdict(list)
     levels[0] = [G.degree(v)]
@@ -96,7 +104,8 @@ def bfs(G, v):
     return levels
 
 
-def l_bfs(G, v):
+# Outdegree + # of disjoint paths
+def path_bfs(G, v):
     visited = defaultdict(int)
     levels = defaultdict(list)
     levels[0] = [G.degree(v)]
@@ -125,25 +134,38 @@ def l_bfs(G, v):
 
 
 class Refinement:
-    def __init__(self, target, pattern):
+    def __init__(self, target, pattern, heuristic=Heuristic.UNION):
         self.target = target
         self.pattern = pattern
         self.refinement = defaultdict(dict)
-        self.bfs_refinement()
+        match heuristic:
+            case Heuristic.UNION:
+                self.union_refinement()
+            case Heuristic.LEVEL:
+                self.level_refinement()
 
     def query(self, target_node, pattern_node):
         return self.refinement[target_node][pattern_node]
 
-    def bfs_refinement(self):
+    def union_refinement(self):
         for t in self.target.nodes():
-            t_part = l_bfs(self.target, t)
+            t_part = degree_bfs(self.target, t)
             for p in self.pattern.nodes():
-                p_part = bfs(self.pattern, p)
-                self.refinement[t][p] = level_dominates(
+                p_part = outdegree_bfs(self.pattern, p)
+                self.refinement[t][p] = union_level_dominates(
                     t_part, p_part, REFINEMENT_TRUNCATION
                 )
 
     def level_refinement(self):
+        for t in self.target.nodes():
+            t_part = degree_bfs(self.target, t)
+            for p in self.pattern.nodes():
+                p_part = outdegree_bfs(self.pattern, p)
+                self.refinement[t][p] = level_dominates(
+                    t_part, p_part, REFINEMENT_TRUNCATION
+                )
+
+    def distance_refinement(self):
         apsp_t = nx.floyd_warshall(self.target)
         apsp_p = nx.floyd_warshall(self.pattern)
         for t, t_dists in apsp_t.items():

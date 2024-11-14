@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 import sys
 
-from sgis.refinement import Refinement
+from sgis.refinement import Heuristic, Refinement
 
 
 class TreeMatcher:
-    def __init__(self, target, pattern):
+    def __init__(self, target, pattern, heuristic=Heuristic.UNION):
         self.target = target
         self.pattern = pattern
 
@@ -16,7 +16,7 @@ class TreeMatcher:
             n: i for i, n in enumerate(pattern)}
 
         self.root_node = TreeNode(self)
-        self.refinement = Refinement(target, pattern)
+        self.refinement = Refinement(target, pattern, heuristic=heuristic)
 
         expected_max_recursion_level = len(target)
         sys.setrecursionlimit(max(

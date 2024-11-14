@@ -3,7 +3,7 @@ from networkx.generators import geometric
 import numpy as np
 import scipy
 
-from sgis.refinement import Refinement, t_bfs, bfs, level_dominates
+from sgis.refinement import Heuristic, Refinement, level_dominates, outdegree_bfs
 from sgis.treematcher import TreeMatcher
 from sgis.util import geometric_mean, harmonic_mean
 from sgis.vf2 import GraphMatcher
@@ -50,20 +50,60 @@ def validate():
     print(GM.subgraph_is_isomorphic())
 
 
+def test_graphmatcher(G, H):
+    GM = GraphMatcher(G, H)
+    result, delta = bench(GM.subgraph_is_isomorphic)
+    expansions = GM.n_expanded_nodes()
+    logger.info(f"\t VF2 Expansions: {expansions}")
+    return result, expansions, delta
+
+
+def test_union_treematcher(G, H):
+    TM = TreeMatcher(G, H, heuristic=Heuristic.UNION)
+    result, delta = bench(TM.subgraph_is_isomorphic)
+    expansions = TM.n_expanded_nodes()
+    logger.info(f"\t Refinement (union) Expansions: {expansions}")
+    return result, expansions, delta
+
+
+def test_levels_treematcher(G, H):
+    TM = TreeMatcher(G, H, heuristic=Heuristic.LEVEL)
+    result, delta = bench(TM.subgraph_is_isomorphic)
+    expansions = TM.n_expanded_nodes()
+    logger.info(f"\t Refinement (levels) Expansions: {expansions}")
+    return result, expansions, delta
+
+
+def test_combined_treematcher(G, H):
+    TM = TreeMatcher(G, H, heuristic=Heuristic.LEVEL)
+    result, delta = bench(TM.subgraph_is_isomorphic)
+    expansions = TM.n_expanded_nodes()
+    logger.info(f"\t Refinement (levels) Expansions: {expansions}")
+    
+    if not result:
+        TM = TreeMatcher(G, H, heuristic=Heuristic.UNION)
+        result, delta = bench(TM.subgraph_is_isomorphic)
+        expansions += TM.n_expanded_nodes()
+        logger.info(f"\t Refinement (union) Expansions: {expansions}")
+    return result, expansions, delta
+
+
 def main():
     random.seed(314159)
-    print("ntarget, vf2mean, vf2std, vf2time, refmean, refstd, reftime")
+    print("ntarget,vf2mean,vf2std,vf2time,refmean,refstd,reftime,accuracy")
     NBENCH_ITER = 100
-    P_EDGE = 0.1
+    P_EDGE = 0.10
     R_RATIO = 0.75
 
-    for i in range(30, 70, 5):
+    for i in range(30, 130, 5):
         N_NODES = i
         vf2_expansions = []
         tree_expansions = []
 
-        vf2_time = []
-        tree_time = []
+        vf2_times = []
+        tree_times = []
+
+        n_correct = NBENCH_ITER
 
         for j in range(NBENCH_ITER):
             G, H = generate_benchmark_pair(N_NODES, P_EDGE, R_RATIO)
@@ -73,33 +113,30 @@ def main():
             logger.info(f"\tPattern nodes: {H.number_of_nodes()}")
             logger.info(f"\tPattern edges: {H.number_of_edges()}")
 
-            GM = GraphMatcher(G, H)
-            gm_result, delta = bench(GM.subgraph_is_isomorphic)
-            vf2_time.append(delta)
-            vf2_expansion = GM.n_expanded_nodes()
-            vf2_expansions.append(vf2_expansion + 1)
-            logger.info(f"\t VF2 Expansions: {vf2_expansion}")
+            gm_result, gm_expansion, gm_time = test_graphmatcher(G, H)
+            tm_result, tm_expansion, tm_time = test_combined_treematcher(G, H)
 
-            TM = TreeMatcher(G, H)
-            tm_result, delta = bench(TM.subgraph_is_isomorphic)
-            tree_time.append(delta)
-            tree_expansion = TM.n_expanded_nodes()
-            tree_expansions.append(tree_expansion + 1)
-            logger.info(f"\t Refinement Expansions: {tree_expansion}")
+            vf2_expansions.append(gm_expansion)
+            tree_expansions.append(tm_expansion)
+
+            vf2_times.append(gm_time)
+            tree_times.append(tm_time)
 
             if tm_result != gm_result:
-                print(f"BAD BATCH {i} {j}")
+                n_correct -= 1
 
         gm_vf2 = geometric_mean(vf2_expansions)
         std_vf2 = scipy.stats.gstd(vf2_expansions)
-        time_vf2 = geometric_mean(vf2_time)
+        time_vf2 = geometric_mean(vf2_times)
 
         gm_tree = geometric_mean(tree_expansions)
         std_tree = scipy.stats.gstd(tree_expansions)
-        time_tree = geometric_mean(tree_time)
+        time_tree = geometric_mean(tree_times)
+
+        accuracy = n_correct / NBENCH_ITER
 
         print(
-            f"{i}, {gm_vf2}, {std_vf2}, {time_vf2}, {gm_tree}, {std_tree}, {time_tree}"
+            f"{i},{gm_vf2},{std_vf2},{time_vf2},{gm_tree},{std_tree},{time_tree},{accuracy}"
         )
 
 
@@ -133,8 +170,8 @@ def counterexample():
     TM = TreeMatcher(T, P)
     print(GM.subgraph_is_isomorphic())
     print(TM.subgraph_is_isomorphic())
-    lva = bfs(P, 4)
-    lvb = bfs(T, 3)
+    lva = outdegree_bfs(P, 4)
+    lvb = outdegree_bfs(T, 3)
     print(lva, lvb, level_dominates(lvb, lva))
     print(P, T)
 
@@ -153,8 +190,8 @@ def cycle_counterexample():
     TM = TreeMatcher(T, P)
     print(GM.subgraph_is_isomorphic())
     print(TM.subgraph_is_isomorphic())
-    lva = bfs(P, 4)
-    lvb = bfs(T, 3)
+    lva = outdegree_bfs(P, 4)
+    lvb = outdegree_bfs(T, 3)
     print(lva, lvb, level_dominates(lvb, lva))
     print(P, T)
 
@@ -164,7 +201,7 @@ def test_refinement():
     pattern = nx.drawing.nx_pydot.read_dot("graphs/zds_pattern.dot")
     target = nx.drawing.nx_pydot.read_dot("graphs/zds_target.dot")
 
-    print(level_dominates(bfs(target, "0"), bfs(pattern, "0")))
+    print(level_dominates(outdegree_bfs(target, "0"), outdegree_bfs(pattern, "0")))
     R = Refinement(target, pattern)
 
 
