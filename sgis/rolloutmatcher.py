@@ -67,7 +67,7 @@ class GraphMatcher:
 
         if not isomorphisms:
             return None
-        best = min(*isomorphisms, key=lambda x: x.cost)
+        best = min(isomorphisms, key=lambda x: x.cost)
         return best.cost, best.target_to_pattern_map
 
     # Greedy search

@@ -70,11 +70,12 @@ def main():
     print(
         "ntarget,htime,btime,rtime,htstd,btstd,rtstd,hcost,bcost,rcost,hcstd,bcstd,rcstd"
     )
-    NBENCH_ITER = 100
+    NBENCH_ITER = 10
     P_EDGE = 0.10
-    R_RATIO = 0.75
+    R_RATIO = 0.50
 
-    for i in range(30, 130, 5):
+    # I've been changing argument 1 to get each data point.
+    for i in range(55, 130, 5):
         N_NODES = i
 
         hcosts = []
@@ -87,23 +88,35 @@ def main():
         for j in range(NBENCH_ITER):
             G, H = generate_weighted_benchmark_pair(N_NODES, P_EDGE, R_RATIO)
             GM = GraphMatcher(G, H)
-            logger.info(f"TEST {i}")
-            logger.info(f"\tTarget nodes: {G.number_of_nodes()}")
-            logger.info(f"\tTarget edges: {G.number_of_edges()}")
-            logger.info(f"\tPattern nodes: {H.number_of_nodes()}")
-            logger.info(f"\tPattern edges: {H.number_of_edges()}")
+            print(f"TEST {i}-{j}")
+            print(f"\tTarget nodes: {G.number_of_nodes()}")
+            print(f"\tTarget edges: {G.number_of_edges()}")
+            print(f"\tPattern nodes: {H.number_of_nodes()}")
+            print(f"\tPattern edges: {H.number_of_edges()}")
 
             (hcost, _), htime = bench(GM.heuristic_isomorphism)
             (bcost, _), btime = bench(GM.best_isomorphism)
             (rcost, _), rtime = bench(GM.rollout_isomorphism)
 
-            hcosts.append(hcost)
-            bcosts.append(bcost)
-            rcosts.append(rcost)
+            hratio = hcost / bcost
+            bratio = bcost / bcost
+            rratio = rcost / bcost
+
+            hcosts.append(hratio)
+            bcosts.append(bratio)
+            rcosts.append(rratio)
 
             htimes.append(htime)
             btimes.append(btime)
             rtimes.append(rtime)
+
+            print(f"\thratio: {hratio}")
+            print(f"\tbratio: {bratio}")
+            print(f"\trratio: {rratio}")
+
+            print(f"\thtime: {htime}")
+            print(f"\tbtime: {btime}")
+            print(f"\trtime: {rtime}")
 
         htime = geometric_mean(htimes)
         btime = geometric_mean(btimes)
